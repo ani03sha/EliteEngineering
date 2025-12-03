@@ -7,9 +7,9 @@ info:
         Focuses on essential authentication and user management.
 
 servers:
-    - url: http://localhost:8001/v1
+    - url: http://localhost:8002/v1
       description: Local Server
-    - url: https://anirudhology.com/payments/v1
+    - url: https://anirudhology.com/auth/v1
       description: Production Server
 
 components:
