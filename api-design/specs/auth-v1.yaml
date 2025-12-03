@@ -426,7 +426,3 @@ tags:
       description: Admin-only endpoints
     - name: System
       description: System endpoints
-
-# Global security - most endpoints require Bearer token
-security:
-    - BearerAuth: []

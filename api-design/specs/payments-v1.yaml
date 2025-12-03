@@ -359,7 +359,7 @@ components:
                     type: integer
                     minimum: 1
                 reason:
-                    $ref: "#/components/schemas/Refund/properties/reason"
+                    $ref: "#/components/schemas/Refund"
                 metadata:
                     type: object
                     additionalProperties:
@@ -645,6 +645,8 @@ paths:
                     $ref: "#/components/responses/Unauthorized"
 
         post:
+            parameters:
+                - $ref: "#/components/parameters/IdempotencyKey"
             tags: [Payments]
             summary: Create payment
             description: |
