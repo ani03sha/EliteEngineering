@@ -1,0 +1,432 @@
+openapi: 3.0.4
+info:
+    title: Authentication Service API
+    version: 1.0.0
+    description: |
+        Simple JWT-based authentication service with Bearer token support.
+        Focuses on essential authentication and user management.
+
+servers:
+    - url: http://localhost:8001/v1
+      description: Local Server
+    - url: https://anirudhology.com/payments/v1
+      description: Production Server
+
+components:
+    schemas:
+        User:
+            type: object
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                    readOnly: true
+                email:
+                    type: string
+                    format: email
+                firstName:
+                    type: string
+                lastName:
+                    type: string
+                roles:
+                    type: array
+                    items:
+                        type: string
+                    default: ["user"]
+                createdAt:
+                    type: string
+                    format: date-time
+                    readOnly: true
+                updatedAt:
+                    type: string
+                    format: date-time
+                    readOnly: true
+
+        AuthResponse:
+            type: object
+            properties:
+                accessToken:
+                    type: string
+                    description: JWT bearer token for API access
+                refreshToken:
+                    type: string
+                    description: Token to get new access token
+                expiresIn:
+                    type: integer
+                    description: Seconds until token expires
+                user:
+                    $ref: "#/components/schemas/User"
+
+        LoginRequest:
+            type: object
+            required:
+                - email
+                - password
+            properties:
+                email:
+                    type: string
+                    format: email
+                password:
+                    type: string
+                    format: password
+
+        RegisterRequest:
+            type: object
+            required:
+                - email
+                - password
+                - firstName
+                - lastName
+            properties:
+                email:
+                    type: string
+                    format: email
+                password:
+                    type: string
+                    format: password
+                    minLength: 6
+                firstName:
+                    type: string
+                lastName:
+                    type: string
+
+        ChangePasswordRequest:
+            type: object
+            required:
+                - currentPassword
+                - newPassword
+            properties:
+                currentPassword:
+                    type: string
+                    format: password
+                newPassword:
+                    type: string
+                    format: password
+                    minLength: 6
+
+        RefreshTokenRequest:
+            type: object
+            properties:
+                refreshToken:
+                    type: string
+
+        ErrorResponse:
+            type: object
+            properties:
+                error:
+                    type: string
+                message:
+                    type: string
+                code:
+                    type: string
+
+    securitySchemes:
+        BearerAuth:
+            type: http
+            scheme: bearer
+            bearerFormat: JWT
+            description: |
+                JWT Bearer Token Authentication.
+                Format: `Authorization: Bearer <token>`
+
+paths:
+    /auth/register:
+        post:
+            summary: Register new user
+            description: Create a new user account
+            tags: [Authentication]
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: "#/components/schemas/RegisterRequest"
+            responses:
+                "201":
+                    description: User registered successfully
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/AuthResponse"
+                "401":
+                    description: Invalid input or user already exists
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                                example:
+                                    error: "validation_error"
+                                    message: "Email already registered"
+                                    code: "USER_EXISTS"
+
+    /auth/login:
+        post:
+            summary: Login user
+            description: Authenticate user and get JWT tokens
+            tags: [Authentication]
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: "#/components/schemas/LoginRequest"
+            responses:
+                "200":
+                    description: Login successful
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/AuthResponse"
+                "401":
+                    description: Invalid credentials
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                                example:
+                                    error: "authentication_failed"
+                                    message: "Invalid email or password"
+                                    code: "INVALID_CREDENTIALS"
+    /auth/refresh:
+        post:
+            summary: Refresh access token
+            description: Get new access token using refresh token
+            tags: [Authentication]
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: "#/components/schemas/RefreshTokenRequest"
+            responses:
+                "200":
+                    description: New tokens issued
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    accessToken:
+                                        type: string
+                                    expiresIn:
+                                        type: integer
+                "401":
+                    description: Invalid or expired refresh token
+
+    /auth/logout:
+        post:
+            summary: Logout user
+            description: Invalidate refresh token
+            tags: [Authentication]
+            security:
+                - BearerAuth: []
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                refreshToken:
+                                    type: string
+            responses:
+                "204":
+                    description: Logout successful
+                "401":
+                    description: Invalid token
+
+    # Protected endpoints - require Bearer token
+    /users/me:
+        get:
+            summary: Get current user profile
+            description: Returns the authenticated user's profile
+            tags: [Users]
+            security:
+                - BearerAuth: []
+            responses:
+                "200":
+                    description: User profile
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/User"
+                "401":
+                    description: Invalid or missing token
+
+        put:
+            summary: Update current user profile
+            description: Update authenticated user's information
+            tags: [Users]
+            security:
+                - BearerAuth: []
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                firstName:
+                                    type: string
+                                lastName:
+                                    type: string
+                                email:
+                                    type: string
+                                    format: email
+            responses:
+                "200":
+                    description: Profile updated
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/User"
+                "400":
+                    description: Invalid input
+                "401":
+                    description: Unauthorized
+
+    /users/me/password:
+        put:
+            summary: Change password
+            description: Change current user's password
+            tags: [Users]
+            security:
+                - BearerAuth: []
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: "#/components/schemas/ChangePasswordRequest"
+            responses:
+                "204":
+                    description: Password changed successfully
+                "400":
+                    description: Current password is incorrect
+                "401":
+                    description: Unauthorized
+
+    # Admin endpoints - require admin role
+    /users:
+        get:
+            summary: List all users (Admin only)
+            description: Get list of all users - requires admin role
+            tags: [Admin]
+            security:
+                - BearerAuth: []
+            parameters:
+                - name: page
+                  in: query
+                  schema:
+                      type: integer
+                      default: 1
+                - name: limit
+                  in: query
+                  schema:
+                      type: integer
+                      default: 20
+            responses:
+                "200":
+                    description: List of users
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    data:
+                                        type: array
+                                        items:
+                                            $ref: "#/components/schemas/User"
+                                    total:
+                                        type: integer
+                                    page:
+                                        type: integer
+                                    limit:
+                                        type: integer
+                "401":
+                    description: Unauthorized
+                "403":
+                    description: Forbidden - requires admin role
+
+    /users/{userId}:
+        get:
+            summary: Get user by ID (Admin only)
+            description: Get user details by ID - requires admin role
+            tags: [Admin]
+            security:
+                - BearerAuth: []
+            parameters:
+                - name: userId
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+            responses:
+                "200":
+                    description: User details
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/User"
+                "401":
+                    description: Unauthorized
+                "403":
+                    description: Forbidden - requires admin role
+                "404":
+                    description: User not found
+
+        delete:
+            summary: Delete user (Admin only)
+            description: Delete user account - requires admin role
+            tags: [Admin]
+            security:
+                - BearerAuth: []
+            parameters:
+                - name: userId
+                  in: path
+                  required: true
+                  schema:
+                      type: string
+                      format: uuid
+            responses:
+                "204":
+                    description: User deleted
+                "401":
+                    description: Unauthorized
+                "403":
+                    description: Forbidden - requires admin role
+                "404":
+                    description: User not found
+
+    # Health check
+    /health:
+        get:
+            summary: Service health check
+            tags: [System]
+            responses:
+                "200":
+                    description: Service is healthy
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    status:
+                                        type: string
+                                        example: "OK"
+                                    timestamp:
+                                        type: string
+                                        format: date-time
+
+tags:
+    - name: Authentication
+      description: User authentication endpoints
+    - name: Users
+      description: User profile management
+    - name: Admin
+      description: Admin-only endpoints
+    - name: System
+      description: System endpoints
+
+# Global security - most endpoints require Bearer token
+security:
+    - BearerAuth: []
