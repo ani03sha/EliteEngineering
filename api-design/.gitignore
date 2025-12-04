@@ -1,0 +1,104 @@
+### Java ###
+*.class
+*.jar
+*.war
+*.ear
+*.log
+*.ctxt
+.mtj.tmp/
+hs_err_pid*
+
+### Maven ###
+services/**/target/
+services/**/pom.xml.tag
+services/**/pom.xml.releaseBackup
+services/**/pom.xml.versionsBackup
+services/**/pom.xml.next
+services/**/release.properties
+services/**/dependency-reduced-pom.xml
+services/**/buildNumber.properties
+services/**/.mvn/timing.properties
+services/**/.mvn
+services/**/mvnw*
+
+### Gradle ###
+services/**/.gradle/
+services/**/build/
+services/**/gradle-app.setting
+services/**/.gradletasknamecache
+
+### Spring Boot ###
+services/**/HELP.md
+services/**/spring-boot-starter-parent/
+
+### IntelliJ IDEA ###
+.idea/
+*.iws
+*.iml
+*.ipr
+services/**/*.iml
+services/**/.idea/
+out/
+
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+services/**/.classpath
+services/**/.project
+services/**/.settings/
+services/**/.springBeans
+services/**/.sts4-cache/
+
+### VS Code ###
+.vscode/
+services/**/.vscode/
+
+### NetBeans ###
+services/**/nbproject/private/
+services/**/nbbuild/
+services/**/dist/
+services/**/nbdist/
+services/**/.nb-gradle/
+
+### MacOS ###
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+### Windows ###
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+### Linux ###
+*~
+
+### Application Properties with Secrets ###
+services/**/application-secret.properties
+services/**/application-secret.yml
+services/**/.env
+services/**/.env.local
+
+### Logs ###
+services/**/logs/
+services/**/*.log
+services/**/*.log.*
+
+### Temporary Files ###
+services/**/tmp/
+services/**/temp/
+services/**/*.tmp
+services/**/*.bak
+services/**/*.swp
+services/**/*.swo
+
+### Database ###
+services/**/*.db
+services/**/*.sqlite
+services/**/*.h2.db

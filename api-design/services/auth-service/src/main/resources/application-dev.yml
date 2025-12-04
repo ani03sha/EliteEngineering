@@ -1,0 +1,17 @@
+spring:
+    config:
+        activate:
+            on-profile: dev
+
+    jpa:
+        hibernate:
+            ddl-auto: update
+        show-sql: true
+
+    datasource:
+        url: jdbc:postgresql://localhost:5432/authdb_dev
+
+logging:
+    level:
+        com.anirudhology.eliteengineering.auth: debug
+        org.springframework.security: debug
