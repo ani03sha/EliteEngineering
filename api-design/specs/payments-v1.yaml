@@ -108,8 +108,11 @@ components:
         PaymentIntent:
             type: object
             required:
+                - id
                 - clientSecret
                 - status
+                - amount
+                - currency
             properties:
                 id:
                     type: string
@@ -118,7 +121,21 @@ components:
                 clientSecret:
                     type: string
                     description: Secret for client-side confirmation
+                    readOnly: true
                     example: "pi_123_secret_456"
+                orderId:
+                    type: string
+                    format: uuid
+                reservationId:
+                    type: string
+                    format: uuid
+                    description: "Inventory reservation id tied to the order"
+                amount:
+                    type: integer
+                    description: "Amount in smallest currency unit"
+                currency:
+                    type: string
+                    pattern: "^[A-Z]{3}$"
                 status:
                     type: string
                     enum:
@@ -127,28 +144,28 @@ components:
                         - requires_action
                         - processing
                         - requires_capture
+                        - captured
                         - canceled
                         - succeeded
-                nextAction:
-                    type: object
-                    properties:
-                        type:
-                            type: string
-                            enum:
-                                [
-                                    redirect_to_url,
-                                    use_stripe_sdk,
-                                    alipay_handle_redirect,
-                                ]
-                        redirectUrl:
-                            type: string
-                            format: uri
+                        - failed
                 paymentMethodTypes:
                     type: array
                     items:
                         type: string
                         enum:
                             [card, bank_transfer, apple_pay, google_pay, paypal]
+                captureMethod:
+                    type: string
+                    enum:
+                        - automatic
+                        - manual
+                    default: automatic
+                createdAt:
+                    type: string
+                    format: date-time
+                updatedAt:
+                    type: string
+                    format: date-time
 
         # Payment Method Models
         PaymentMethod:
@@ -359,7 +376,13 @@ components:
                     type: integer
                     minimum: 1
                 reason:
-                    $ref: "#/components/schemas/Refund"
+                    type: string
+                    enum:
+                        - duplicate
+                        - fraudulent
+                        - requested_by_customer
+                        - product_unsatisfactory
+                        - other
                 metadata:
                     type: object
                     additionalProperties:
@@ -372,15 +395,13 @@ components:
                 code:
                     type: string
                     enum:
-                        - card_declined
-                        - expired_card
-                        - insufficient_funds
-                        - invalid_cvc
-                        - invalid_expiry_month
-                        - invalid_expiry_year
-                        - invalid_number
-                        - processing_error
-                        - authentication_required
+                        - PAYMENT_METHOD_REQUIRED
+                        - PAYMENT_REQUIRES_ACTION
+                        - PAYMENT_FAILED
+                        - DUPLICATE_PAYMENT
+                        - RESERVATION_EXPIRED
+                        - INVALID_PAYMENT_INTENT_STATE
+                        - GATEWAY_ERROR
                 declineCode:
                     type: string
                     example: "card_not_supported"
@@ -489,7 +510,8 @@ components:
         IdempotencyKey:
             name: Idempotency-Key
             in: header
-            required: false
+            required: true
+            scope: 7 days
             schema:
                 type: string
                 description: |
@@ -740,6 +762,8 @@ paths:
             tags: [Payment Intents]
             summary: Create payment intent
             description: Create a PaymentIntent for client-side payment confirmation
+            parameters:
+                - $ref: '#/components/parameters/IdempotencyKey'   # required for create
             security:
                 - BearerAuth: []
             requestBody:
@@ -749,9 +773,13 @@ paths:
                         schema:
                             type: object
                             required:
+                                - orderId
                                 - amount
                                 - currency
                             properties:
+                                orderId:
+                                    type: string
+                                    format: uuid
                                 amount:
                                     type: integer
                                 currency:
@@ -763,10 +791,10 @@ paths:
                                 captureMethod:
                                     type: string
                                     enum: [automatic, manual]
-                                setupFutureUsage:
-                                    type: string
                                 metadata:
                                     type: object
+                                    additionalProperties:
+                                        type: string
             responses:
                 "201":
                     description: Payment intent created
@@ -774,6 +802,10 @@ paths:
                         application/json:
                             schema:
                                 $ref: "#/components/schemas/PaymentIntent"
+                "400":
+                    description: Bad request (invalid order or mismatch)
+                "409":
+                    description: Reservation missing/expired or duplicate idempotency (see OUT_OF_STOCK, DUPLICATE_PAYMENT)
 
     /payment_intents/{paymentIntentId}/confirm:
         post:
@@ -782,6 +814,7 @@ paths:
             description: Confirm a PaymentIntent with payment method details
             parameters:
                 - $ref: "#/components/parameters/PaymentIntentId"
+                - $ref: '#/components/parameters/IdempotencyKey' # Idempotent confirm as well
             requestBody:
                 content:
                     application/json:
@@ -795,9 +828,51 @@ paths:
                                     format: uri
             responses:
                 "200":
-                    $ref: "#/components/responses/PaymentProcessed"
+                    description: Payment processed (or requires action)
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/PaymentIntent"
                 "202":
-                    $ref: "#/components/responses/RequiresAction"
+                    description: Requires additional action (3D Secure) — client must complete challenge
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    type:
+                                        type: string
+                                        enum: [three_d_secure_redirect, customer_action]
+                                    redirectUrl:
+                                        type: string
+                                        format: url
+                                    paymentIntent:
+                                        $ref: "#/components/schemas/PaymentIntent"
+                "402":
+                    description: Payment failed (card declined, insufficient funds)
+    
+    /payments/{paymentId}/capture:
+        post:
+            tags: [Payments]
+            summary: Capture an authorized payment (manual capture flow)
+            parameters:
+                - $ref: '#/components/parameters/PaymentId'
+                - $ref: '#/components/parameters/IdempotencyKey'
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                amount:
+                                    type: integer
+            responses:
+                "200":
+                    description: Capture successful
+                "400":
+                    description: Invalid capture request
+                "409":
+                    description: Already captured or invalid state
 
     # Refund Operations
     /refunds:
@@ -908,7 +983,7 @@ paths:
     /webhooks:
         post:
             tags: [Webhooks]
-            summary: Process webhook events
+            summary: Process payment provider webhooks
             description: |
                 Receive and process webhook events from payment processors.
 
@@ -924,7 +999,11 @@ paths:
                       type: string
                       enum: [stripe, paypal, braintree]
             requestBody:
-                $ref: "#/components/requestBodies/WebhookPayload"
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: "#/components/schemas/PaymentWebhook"
             responses:
                 "200":
                     $ref: "#/components/responses/WebhookVerified"
