@@ -2,7 +2,12 @@ openapi: 3.0.4
 info:
     title: Orders Service API
     version: 1.0.0
-    description: API for managing customer orders
+    description: |
+        Inventory reservation contract:
+        - Orders service relies on Inventory reservations for strong correctness.
+        - Reservation is an atomic check-and-decrement in Inventory; Orders references reservationId on success.
+        - Reservation default TTL = 15 minutes. Inventory will expire reservations and release stock after TTL.
+        - Inventory API is defined in `specs/inventory-v1.yaml` (recommended) or as internal implementation detail if Inventory is co-located.
 servers:
     - url: http://localhost:8000/v1
       description: Local Server
@@ -42,6 +47,7 @@ components:
                 reservationId:
                     type: string
                     format: uuid
+                    nullable: true
                     description: "Inventory reservation token (if reserved)."
                 items:
                     type: array
@@ -49,7 +55,11 @@ components:
                         $ref: "#/components/schemas/OrderItem"
                 totalAmount:
                     type: integer
-                    description: "Amount in smallest currency unit"
+                    description: "Amount in smallest currency unit (e.g., cents/paise)."
+                currency:
+                    type: string
+                    pattern: "^[A-Z]{3}s"
+                    example: "INR"
                 shippingAddress:
                     $ref: "#/components/schemas/Address"
                 billingAddress:
@@ -283,15 +293,22 @@ paths:
                                     $ref: "#/components/schemas/Address"
             tags: [Orders]
             responses:
-                "201":
+                '201':
                     description: Order created and inventory reserved
                     content:
                         application/json:
                             schema:
                                 $ref: "#/components/schemas/Order"
-                "400":
-                    $ref: "#/components/responses/BadRequest"
-                "409":
+                '400':
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/responses/BadRequest"
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                    
+                '409':
                     description: Conflict — insufficient inventory or duplicate request
                     content:
                         application/json:
