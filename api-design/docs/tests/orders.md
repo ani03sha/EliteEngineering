@@ -1,0 +1,5 @@
+- T1 — Happy path: reserve → create order → pay → PAID → PROCESSING
+- T2 — Duplicate create with same Idempotency-Key → single order; second returns same 201 + Location
+- T3 — Concurrent reservations compete on last unit → one success, others get OUT_OF_STOCK
+- T4 — Reservation expiry → attempt to pay after expiry → RESERVATION_EXPIRED & CANCELLED
+- T5 — Payment fails → order CANCELLED & reservation released
