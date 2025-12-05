@@ -33,6 +33,26 @@ components:
                     items:
                         type: string
                     default: ["user"]
+                state:
+                    type: string
+                    description: |
+                        One of the user lifecycle states:
+                        - email_unverified: registered, email not confirmed
+                        - active: normal operational state
+                        - suspended: admin blocked
+                        - dormant: auto-archived due to inactivity (6+ months)
+                        - inactive: soft-deleted (18+ months inactivity)
+                    enum:
+                        - email_unverified
+                        - active
+                        - suspended
+                        - dormant
+                        - inactive
+                    example: active
+                lastLoginAt:
+                    type: string
+                    format: date-time
+                    description: Timestamp of last successful authentication (used to compute dormancy)
                 createdAt:
                     type: string
                     format: date-time
@@ -119,6 +139,15 @@ components:
                     type: string
                 code:
                     type: string
+                requestId:
+                    type: string
+                action:
+                    type: object
+                    properties:
+                        type:
+                            type: string
+                        href:
+                            type: string
 
     securitySchemes:
         BearerAuth:
@@ -162,7 +191,34 @@ paths:
     /auth/login:
         post:
             summary: Login user
-            description: Authenticate user and get JWT tokens
+            description: |
+                Authenticate user and get JWT tokens.
+                If the user's `state` is `dormant`, a successful login transitions the user to `active`.
+                The service will:
+                - set `lastLoginAt = now()`
+                - emit a `user_state_changed(dormant->active)` audit event
+                - send a security notification email to the user
+                
+                Email template below:
+                
+                Hi {{firstName}},
+
+                We noticed you recently signed in to your account and it has been reactivated.
+
+                If this was you, no action is needed — welcome back!
+
+                If you do NOT recognize this activity, please:
+                1) Review recent sign-ins: https://app.example.com/account/security
+                2) Reset your password immediately: https://app.example.com/account/reset-password
+                3) Contact Support: support@example.com
+
+                Details:
+                - Account: {{email}}
+                - Time: {{timestamp}}
+                - IP: {{ip}}
+                - Device: {{userAgent}}
+
+                We've temporarily revoked any long-lived refresh tokens for safety. If you have trouble signing in, follow the reset link above.
             tags: [Authentication]
             requestBody:
                 required: true
@@ -172,7 +228,7 @@ paths:
                             $ref: "#/components/schemas/LoginRequest"
             responses:
                 "200":
-                    description: Login successful
+                    description: Login successful; may include state transition side-effects
                     content:
                         application/json:
                             schema:
@@ -187,6 +243,21 @@ paths:
                                     error: "authentication_failed"
                                     message: "Invalid email or password"
                                     code: "INVALID_CREDENTIALS"
+                '403':
+                    description: Forbidden (e.g., user suspended or inactive)
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                            examples:
+                                suspended:
+                                    value:
+                                        code: "USER_SUSPENDED"
+                                        message: "Account suspended. Contact support."
+                                inactive:
+                                    value:
+                                        code: "USER_INACTIVE"
+                                        message: "Account deleted. Contact support"
     /auth/refresh:
         post:
             summary: Refresh access token
