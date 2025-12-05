@@ -1,5 +1,17 @@
 # Authentication Service (auth-service)
 
+## User's State Diagram
+
+```plaintext
+email_unverified --[verify_email]--> active
+active --[inactivity timeout]--> dormant
+active --[suspend_by_admin]--> suspended
+suspended --[unsuspend]--> active
+active --[deactivate_by_user]--> inactive (soft_delete)
+inactive --[purge_after_retention]--> hard_deleted (irreversible)
+any --[delete_by_admin_with_compliance]--> hard_deleted (rare)
+```
+
 ## Rules
 
 1. **POST /v1/auth/login:**
