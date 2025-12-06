@@ -138,7 +138,6 @@ application-dev.properties
 *.mv.db
 *.trace.db
 data/
-db/
 *.sql.log
 
 # Docker & Container
