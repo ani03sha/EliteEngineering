@@ -1,0 +1,479 @@
+openapi: 3.0.4
+info:
+    title: Orders Service API
+    version: 1.0.0
+    description: |
+        Inventory reservation contract:
+        - Orders service relies on Inventory reservations for strong correctness.
+        - Reservation is an atomic check-and-decrement in Inventory; Orders references reservationId on success.
+        - Reservation default TTL = 15 minutes. Inventory will expire reservations and release stock after TTL.
+        - Inventory API is defined in `specs/inventory-v1.yaml` (recommended) or as internal implementation detail if Inventory is co-located.
+servers:
+    - url: http://localhost:8000/v1
+      description: Local Server
+    - url: https://anirudhology.com/orders/v1
+      description: Production Server
+
+# Global components
+components:
+    schemas:
+        Order:
+            type: object
+            required:
+                - id
+                - customerId
+                - items
+                - status
+            properties:
+                id:
+                    type: string
+                    format: uuid
+                    readOnly: true
+                customerId:
+                    type: string
+                    format: uuid
+                status:
+                    type: string
+                    enum:
+                        - DRAFT
+                        - PLACED_PENDING_PAYMENT
+                        - PAID
+                        - PROCESSING
+                        - SHIPPED
+                        - DELIVERED
+                        - CANCELLED
+                        - FAILED
+                    description: "Canonical state (transitions controlled by service)."
+                reservationId:
+                    type: string
+                    format: uuid
+                    nullable: true
+                    description: "Inventory reservation token (if reserved)."
+                items:
+                    type: array
+                    items:
+                        $ref: "#/components/schemas/OrderItem"
+                totalAmount:
+                    type: integer
+                    description: "Amount in smallest currency unit (e.g., cents/paise)."
+                currency:
+                    type: string
+                    pattern: "^[A-Z]{3}s"
+                    example: "INR"
+                shippingAddress:
+                    $ref: "#/components/schemas/Address"
+                billingAddress:
+                    $ref: "#/components/schemas/Address"
+                createdAt:
+                    type: string
+                    format: date-time
+                    readOnly: true
+                updatedAt:
+                    type: string
+                    format: date-time
+                    readOnly: true
+
+        OrderItem:
+            type: object
+            required:
+                - productId
+                - quantity
+            properties:
+                productId:
+                    type: string
+                    format: uuid
+                name:
+                    type: string
+                quantity:
+                    type: integer
+                    minimum: 1
+                unitPrice:
+                    type: number
+                    format: double
+                    minimum: 0
+                subTotal:
+                    type: number
+                    format: double
+                    readOnly: true
+
+        Address:
+            type: object
+            properties:
+                street:
+                    type: string
+                city:
+                    type: string
+                state:
+                    type: string
+                postalCode:
+                    type: string
+                country:
+                    type: string
+                    default: "IN"
+
+        Error:
+            type: object
+            properties:
+                code:
+                    type: string
+                    description: "Machine-readable error code (clients should branch on this)."
+                    enum:
+                        - OUT_OF_STOCK
+                        - DUPLICATE_ORDER
+                        - ORDER_NOT_CANCELLABLE
+                        - ORDER_ALREADY_PAID
+                        - RESERVATION_EXPIRED
+                        - INVALID_RESERVATION
+                message:
+                    type: string
+                details:
+                    type: array
+                    items:
+                        type: string
+                action:
+                    type: object
+                    properties:
+                        type:
+                            type: string
+                            description: "Suggested client action, e.g., 'retry', 'contact_support', 'show_payment_ui'"
+                        href:
+                            type: string
+                            description: "Optional link for next action"
+
+
+    parameters:
+        OrderId:
+            name: orderId
+            in: path
+            required: true
+            schema:
+                type: string
+                format: uuid
+
+        PaginationLimit:
+            name: limit
+            in: query
+            schema:
+                type: integer
+                default: 20
+                maximum: 100
+
+        PaginationOffset:
+            name: offset
+            in: query
+            schema:
+                type: integer
+                default: 0
+                minimum: 0
+        
+        IdempotencyKey:
+            name: Idempotency-Key
+            in: header
+            required: true
+            description: >
+                UUID or unique string generated by client to make POST idempotent.
+                Scope: (operation, idempotency-key, user-id).
+                Re-sending the same request with the same key must return the same response and not create duplicates.
+            schema:
+                type: string
+
+    responses:
+        NotFound:
+            description: Resource not found
+            content:
+                application/json:
+                    schema:
+                        $ref: "#/components/schemas/Error"
+
+        BadRequest:
+            description: Invalid request
+            content:
+                application/json:
+                    schema:
+                        $ref: "#/components/schemas/Error"
+
+        Unauthorized:
+            description: Authentication required
+            content:
+                application/json:
+                    schema:
+                        $ref: "#/components/schemas/Error"
+
+    securitySchemes:
+        BearerAuth:
+            type: http
+            scheme: bearer
+            bearerFormat: JWT
+        ApiKeyAuth:
+            type: apiKey
+            in: header
+            name: X-API-Key
+
+# Paths (endpoints)
+paths:
+    /orders:
+        get:
+            summary: List all orders
+            description: Retrieve a paginated list of orders with optional filters
+            parameters:
+                - $ref: "#/components/parameters/PaginationLimit"
+                - $ref: "#/components/parameters/PaginationOffset"
+                - name: status
+                  in: query
+                  schema:
+                      type: string
+                      enum: [pending, processing, shipped, delivered, cancelled]
+                - name: customerId
+                  in: query
+                  schema:
+                      type: string
+                      format: uuid
+            tags: [Orders]
+            responses:
+                "200":
+                    description: Successful response
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    data:
+                                        type: array
+                                        items:
+                                            $ref: "#/components/schemas/Order"
+                                    pagination:
+                                        type: object
+                                        properties:
+                                            total:
+                                                type: integer
+                                            limit:
+                                                type: integer
+                                            offset:
+                                                type: integer
+                "401":
+                    $ref: "#/components/responses/Unauthorized"
+
+        post:
+            summary: Create a new order
+            description: |
+                Create an order (atomically reserves inventory).
+
+                Behaviour:
+                    - The server will attempt to **reserve** requested inventory before creating the order.
+                    - Default reservation TTL is **15 minutes** (clients may override with `reservationTtlMinutes`).
+                    - Clients **must** provide an `Idempotency-Key` header to avoid duplicate orders when retrying.
+                    - Idempotency scope: (operation="create-order", idempotency-key, authenticated-user-id).
+            parameters:
+                - $ref: "#/components/parameters/IdempotencyKey"
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - customerId
+                                - items
+                            properties:
+                                customerId:
+                                    type: string
+                                    format: uuid
+                                items:
+                                    type: array
+                                    items:
+                                        $ref: "#/components/schemas/OrderItem"
+                                    minItems: 1
+                                reservationTtlMinutes:
+                                    type: integer
+                                    description: "Optional reservation TTL in minutes (default 15)."
+                                    default: 15
+                                shippingAddress:
+                                    $ref: "#/components/schemas/Address"
+                                billingAddress:
+                                    $ref: "#/components/schemas/Address"
+            tags: [Orders]
+            responses:
+                '201':
+                    description: Order created and inventory reserved
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/Order"
+                '400':
+                    description: Bad Request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/responses/BadRequest"
+                '401':
+                    $ref: '#/components/responses/Unauthorized'
+                    
+                '409':
+                    description: Conflict — insufficient inventory or duplicate request
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/Error"
+                            examples:
+                                out_of_stock:
+                                    value:
+                                        code: "OUT_OF_STOCK"
+                                        message: "Insufficient inventory for product X"
+                                        details:
+                                            ["productId:...", "available: 0"]
+                                duplicate:
+                                    value:
+                                        code: "DUPLICATE_ORDER"
+                                        message: "Duplicate order detected for given Idempotency-Key"
+
+    /orders/{orderId}:
+        parameters:
+            - $ref: "#/components/parameters/OrderId"
+
+        get:
+            summary: Get order by id
+            responses:
+                "200":
+                    description: Order details
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/Order"
+                "404":
+                    $ref: "#/components/responses/NotFound"
+
+        put:
+            summary: Update order
+            description: Update order details (typically limited to certain fields)
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            properties:
+                                status:
+                                    type: string
+                                    enum:
+                                        [
+                                            processing,
+                                            shipped,
+                                            delivered,
+                                            cancelled,
+                                        ]
+                                shippingAddress:
+                                    $ref: "#/components/schemas/Address"
+            responses:
+                "200":
+                    description: Order updated
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/Order"
+                "400":
+                    $ref: "#/components/responses/BadRequest"
+                "404":
+                    $ref: "#/components/responses/NotFound"
+
+        delete:
+            summary: Cancel order
+            responses:
+                "204":
+                    description: Order cancelled successfully
+                "404":
+                    $ref: "#/components/responses/NotFound"
+                "409":
+                    description: Cannot cancel order in the current state
+
+    /orders/{orderId}/items:
+        parameters:
+            - $ref: "#/components/parameters/OrderId"
+
+        post:
+            summary: Add item to order
+            description: Add items to an existing order (if order is still editable)
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: "#/components/schemas/OrderItem"
+            tags: [Order Items]
+            responses:
+                "200":
+                    description: Item added
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/Order"
+
+    /inventory/reservations:
+        post:
+            summary: Reserver inventory atomically
+            requestBody:
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            type: object
+                            required:
+                                - items
+                                - ownerType
+                                - ownerId
+                            properties:
+                                ownerType:
+                                    type: string
+                                    example: "order"
+                                ownerId:
+                                    type: string
+                                items:
+                                    type: array
+                                    items:
+                                        type: object
+                                        required:
+                                            - productId
+                                            - quantity
+                                        properties:
+                                            productId:
+                                                type: string
+                                                format: uuid
+                                            quantity:
+                                                type: integer
+                                                minimum: 1
+                                ttlMinutes:
+                                    type: integer
+                                    default: 15
+            responses:
+                "201":
+                    description: Reservation created
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                                properties:
+                                    reservationId:
+                                        type: string
+                                    expiresAt:
+                                        type: string
+                "409":
+                    description: Insufficient stock
+
+# Apply security globally
+security:
+    - BearerAuth: []
+
+# Tags and Organization
+tags:
+    - name: Orders
+      description: Order management operations
+    - name: Order Items
+      description: Order line item operations
+# Notes:
+
+# Idempotency-Key: required for POST /orders and POST /orders/{id}/pay.
+# Scope: (operation, idempotency-key, user-id).
+# Behavior: repeated request with same key returns same response (201 + Location) and does not create duplicates.
+
+# Idempotency retention: Servers will persist idempotency records for **7 days**.
+# Clients retrying within 7 days using the same Idempotency-Key will receive the original response.
+# Servers may purge records after 7 days; clients should not rely on idempotency beyond this window.

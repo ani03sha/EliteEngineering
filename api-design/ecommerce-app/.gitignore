@@ -1,0 +1,251 @@
+# Java & Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+*.zip
+*.tar.gz
+*.rar
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+
+# Maven Wrapper in services and libs
+libs/**/mvnw
+libs/**/mvnw.cmd
+libs/**/.mvn/
+services/**/mvnw
+services/**/mvnw.cmd
+services/**/.mvn/
+
+# IDE - IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# IDE - Eclipse
+.classpath
+.project
+.settings/
+.metadata/
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.loadpath
+.recommenders
+
+# IDE - VS Code
+.vscode/
+*.code-workspace
+.history/
+
+# IDE - NetBeans
+nbproject/private/
+build/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# Logs
+*.log
+logs/
+*.log.*
+log/
+
+# OS - macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# OS - Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# OS - Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+!.env.template
+*.secret
+*.secrets
+secrets/
+secrets.yml
+secrets.yaml
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+application-local.yml
+application-local.yaml
+application-local.properties
+application-dev.yml
+application-dev.yaml
+application-dev.properties
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.h2.db
+*.mv.db
+*.trace.db
+data/
+db/
+*.sql.log
+
+# Docker & Container
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# Kubernetes
+*.kubeconfig
+secrets.k8s.yaml
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Test Coverage & Reports
+coverage/
+*.coverage
+.nyc_output/
+jacoco.exec
+*.exec
+test-results/
+test-reports/
+allure-results/
+allure-report/
+
+# Spring Boot
+spring-boot-starter-parent/
+.springBeans
+.sts4-cache/
+
+# Gradle (in case you add Gradle later)
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+
+# Node.js (for any frontend or tooling)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Compiled output
+*.com
+*.dll
+*.exe
+*.o
+*.so
+*.dylib
+
+# Package Files
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+.temp/
+
+# Backup files
+*.bak
+*.backup
+*~
+*.orig
+
+# Generated files
+generated/
+gen/
+.generated/
+
+# Claude Code (keep local settings)
+.claude/settings.local.json
+
+# Misc
+*.pid
+*.seed
+*.pid.lock
+.sass-cache/
+connect.lock
+typings/
+.npm
+.eslintcache
+.node_repl_history
+.yarn-integrity
+
+# Claude
+.claude/
