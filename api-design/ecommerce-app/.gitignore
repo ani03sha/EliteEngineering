@@ -230,6 +230,8 @@ pnpm-lock.yaml
 generated/
 gen/
 .generated/
+target/generated-sources/
+**/target/generated-sources/openapi/
 
 # Claude Code (keep local settings)
 .claude/settings.local.json

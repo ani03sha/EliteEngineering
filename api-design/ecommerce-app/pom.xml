@@ -254,9 +254,9 @@
 
             <!-- Internal Libraries -->
             <dependency>
-                <groupId>com.ecommerce</groupId>
+                <groupId>com.anirudhology.eliteengineering</groupId>
                 <artifactId>idempotency</artifactId>
-                <version>${project.version}</version>
+                <version>0.0.1-SNAPSHOT</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
