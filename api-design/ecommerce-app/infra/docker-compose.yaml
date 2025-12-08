@@ -32,7 +32,7 @@ services:
 
     auth-service:
         build:
-            context: ./service/auth-service
+            context: ../services/auth-service
             dockerfile: Dockerfile
         ports:
             - "8002:8002"
@@ -64,7 +64,7 @@ services:
 
     orders-service:
         build:
-            context: ./service/orders-service
+            context: ../services/orders-service
             dockerfile: Dockerfile
         ports:
             - "8000:8000"
@@ -98,7 +98,7 @@ services:
 
     payments-service:
         build:
-            context: ./service/payments-service
+            context: ../services/payments-service
             dockerfile: Dockerfile
         ports:
             - "8001:8001"
