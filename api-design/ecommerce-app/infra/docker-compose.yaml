@@ -1,0 +1,140 @@
+name: ecommerce-app
+
+services:
+    postgres:
+        image: postgres:18.1-alpine
+        environment:
+            POSTGRES_DB: ecommerce
+            POSTGRES_USER: admin
+            POSTGRES_PASSWORD: admin123
+        ports:
+            - "5432:5432"
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U admin -d ecommerce"]
+            interval: 5s
+            timeout: 2s
+            retries: 10
+
+    redis:
+        image: redis:8.4-alpine
+        command: ["redis-server", "--requirepass", "redis123"]
+        ports:
+            - "6379:6379"
+        volumes:
+            - redis_data:/data
+        healthcheck:
+            test: ["CMD", "redis-cli", "-a", "redis123", "ping"]
+            interval: 5s
+            timeout: 2s
+            retries: 5
+
+    auth-service:
+        build:
+            context: ./service/auth-service
+            dockerfile: Dockerfile
+        ports:
+            - "8002:8002"
+        environment:
+            - DATABASE_URL=jdbc:postgresql://postgres:5432/ecommerce
+            - DB_USER=admin
+            - DB_PASS=admin123
+            - REDIS_HOST=redis
+            - REDIS_PORT=6379
+            - REDIS_PASSWORD=redis123
+            - PORT=8002
+            - JWT_SECRET=dev-jwt-secret
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        networks:
+            - app-network
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "curl -fsS http://localhost:8002/health || exit 1",
+                ]
+            interval: 5s
+            timeout: 2s
+            retries: 5
+
+    orders-service:
+        build:
+            context: ./service/orders-service
+            dockerfile: Dockerfile
+        ports:
+            - "8000:8000"
+        environment:
+            - DATABASE_URL=jdbc:postgresql://postgres:5432/ecommerce
+            - DB_USER=admin
+            - DB_PASS=admin123
+            - REDIS_HOST=redis
+            - REDIS_PORT=6379
+            - REDIS_PASSWORD=redis123
+            - PORT=8002
+            - AUTH_SERVICE_URL=http://auth-service:8002/v1
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            auth-service:
+                condition: service_started
+        networks:
+            - app-network
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "curl -fsS http://localhost:8000/health || exit 1",
+                ]
+            interval: 5s
+            timeout: 2s
+            retries: 5
+
+    payments-service:
+        build:
+            context: ./service/payments-service
+            dockerfile: Dockerfile
+        ports:
+            - "8001:8001"
+        environment:
+            - DATABASE_URL=jdbc:postgresql://postgres:5432/ecommerce
+            - DB_USER=admin
+            - DB_PASS=admin123
+            - REDIS_HOST=redis
+            - REDIS_PORT=6379
+            - REDIS_PASSWORD=redis123
+            - PORT=8002
+            - AUTH_SERVICE_URL=http://auth-service:8002/v1
+            - ORDERS_SERVICE_URL=http://orders-service:8000/v1
+            - IDEMPOTENCY_RETENTION_DAYS=7
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            auth-service:
+                condition: service_started
+            orders-service:
+                condition: service_started
+        networks:
+            - app-network
+        healthcheck:
+            test:
+                ["CMD-SHELL", "curl -fsS http://localhost:8001/health|| exit 1"]
+            interval: 5s
+            timeout: 2s
+            retries: 5
+
+networks:
+    app-network:
+        driver: bridge
+
+volumes:
+    postgres_data:
+    redis_data:
